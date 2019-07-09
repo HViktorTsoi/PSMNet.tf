@@ -23,11 +23,11 @@ class PSMNet:
     def build_net(self):
         # 提特征 注意建图时右分支和左分支共享权重
         self.ref_feature = self.feature_extraction(self.left_inputs)
-        # self.target_feature = self.feature_extraction(self.right_inputs, weight_share=True)
-        #
-        # # 计算cost volume
-        # self.cost_volume = self.cost_volume_aggregation(self.ref_feature, self.target_feature)
-        #
+        self.target_feature = self.feature_extraction(self.right_inputs, weight_share=True)
+
+        # 计算cost volume
+        self.cost_volume = self.cost_volume_aggregation(self.ref_feature, self.target_feature)
+
         # # 实现3d cnn以及视差图估计
         # if self.head_type == config.HEAD_STACKED_HOURGLASS:
         #     self.disparity_1, self.disparity_2, self.disparity_3 = self.stacked_hourglass(self.cost_volume)
@@ -77,7 +77,7 @@ class PSMNet:
                     )
 
             with tf.variable_scope('conv4'):
-                # 三层resblock
+                # 三层res-block
                 for layer_id in range(3):
                     outputs = self._build_residual_block(
                         outputs, tf.layers.conv2d, filters=128, kernel_size=3,
@@ -87,11 +87,39 @@ class PSMNet:
 
             return outputs
 
-    def spp(self, inputs):
-        return inputs
+    def spp(self, inputs, weight_share):
+        with tf.variable_scope('SPP'):
+            # spp的四个分支
+            branches = [self._build_spp_branch(inputs, pool_size=pool_size,
+                                               reuse=weight_share, layer_name='branch_{}'.format(branch_id + 1))
+                        for branch_id, pool_size in enumerate([64, 32, 16, 8])]
+
+            # 加上CNN base中的skip连接 conv2_16以及conv4_3(即inputs) 注意这里添加的是relu之前的连接
+            branches.append(tf.get_default_graph().get_tensor_by_name('CNN_BASE/conv2/res_conv2_16/add:0'))
+            branches.append(tf.get_default_graph().get_tensor_by_name('CNN_BASE/conv4/res_conv4_3/add:0'))
+
+            # 拼接
+            outputs = tf.concat(branches, axis=-1, name='spp_branch_concat')
+
+            # 　特征融合
+            fusion = self._build_conv_block(outputs, tf.layers.conv2d, filters=128, kernel_size=3,
+                                            reuse=weight_share, layer_name='fusion_conv_3x3')
+            fusion = self._build_conv_block(fusion, tf.layers.conv2d, filters=32, kernel_size=1,
+                                            reuse=weight_share, layer_name='fusion_conv_1x1')
+            print(outputs, fusion)
+            return fusion
 
     def feature_extraction(self, inputs, weight_share=False):
-        return self.spp(self.cnn(inputs, weight_share))
+        """
+        特征提取层
+        :param inputs: 输入
+        :param weight_share: 是否共享权值
+        :return: 特征
+        """
+        return self.spp(
+            self.cnn(inputs, weight_share),
+            weight_share
+        )
 
     def cost_volume_aggregation(self, left_inputs, right_inputs):
         return tf.tile(tf.stack([left_inputs, right_inputs], axis=1), multiples=[1, 32, 1, 1, 1])
@@ -107,6 +135,7 @@ class PSMNet:
 
     def _build_conv_block(self, inputs, conv_function, filters, kernel_size, strides=1, dilation_rate=None,
                           layer_name='conv', apply_bn=True, apply_relu=True, reuse=False):
+        # 构建卷积块
         conv_param = {
             'padding': 'same',
             'kernel_initializer': tfc.layers.xavier_initializer(),
@@ -136,6 +165,7 @@ class PSMNet:
 
     def _build_residual_block(self, inputs, conv_function, filters, kernel_size, strides=1, dilation_rate=None,
                               layer_name='conv', reuse=False, projection=False):
+        # 构建残差连接块
         with tf.variable_scope(layer_name):
             inputs_shortcut = inputs
             # 构建res_block的前两个conv层
@@ -154,7 +184,24 @@ class PSMNet:
                                                          apply_relu=False, apply_bn=False, reuse=reuse)
             # 加残差连接
             outputs = tf.add(outputs, inputs_shortcut, name='add')
-            outputs = tf.nn.relu(outputs)
+            outputs = tf.nn.relu(outputs, name='relu')
+            return outputs
+
+    def _build_spp_branch(self, inputs, pool_size, reuse, layer_name):
+        # 构建spp的一个分支
+        with tf.variable_scope(layer_name):
+            # 原始尺寸
+            origin_size = tf.shape(inputs)[1:3]
+
+            # 平均池化
+            outputs = tf.layers.average_pooling2d(inputs, pool_size, strides=1, name='avg_pool')
+
+            # 卷积
+            outputs = self._build_conv_block(outputs, tf.layers.conv2d, filters=32, kernel_size=3, reuse=reuse)
+
+            # 上采样 恢复原始尺寸
+            outputs = tf.image.resize_images(outputs, size=origin_size)
+
             return outputs
 
 
