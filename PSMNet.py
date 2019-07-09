@@ -26,7 +26,7 @@ class PSMNet:
         self.target_feature = self.feature_extraction(self.right_inputs, weight_share=True)
 
         # 计算cost volume
-        self.cost_volume = self.cost_volume_aggregation(self.ref_feature, self.target_feature)
+        self.cost_volume = self.cost_volume_aggregation(self.ref_feature, self.target_feature, config.MAX_DISP)
 
         # # 实现3d cnn以及视差图估计
         # if self.head_type == config.HEAD_STACKED_HOURGLASS:
@@ -121,8 +121,36 @@ class PSMNet:
             weight_share
         )
 
-    def cost_volume_aggregation(self, left_inputs, right_inputs):
-        return tf.tile(tf.stack([left_inputs, right_inputs], axis=1), multiples=[1, 32, 1, 1, 1])
+    def cost_volume_aggregation(self, left_inputs, right_inputs, max_disp):
+        """
+        将左右两帧的特征聚合 生成cost-volume
+        :param left_inputs: 左侧输入
+        :param right_inputs: 右侧输入
+        :param max_disp: 最大视差深度
+        :return: cost-volume
+        """
+        cost_volume = []
+        for d in range(max_disp // 4):
+            if d > 0:
+                # 左右两侧的视差cost 注意这里是在width维度计算的视差
+                left_shift = left_inputs[:, :, d:, :]
+                right_shift = left_inputs[:, :, :-d, :]
+
+                # 补0填充 在width的维度起始补0
+                left_shift = tf.pad(left_shift, paddings=[[0, 0], [0, 0], [d, 0], [0, 0]])
+                right_shift = tf.pad(right_shift, paddings=[[0, 0], [0, 0], [d, 0], [0, 0]])
+
+                # 在channel维度拼接
+                cost_plate = tf.concat([left_shift, right_shift], axis=-1)
+            else:
+                # d为0时直接拼接未经过shift的原图
+                cost_plate = tf.concat([left_inputs, right_inputs], axis=-1)
+            cost_volume.append(cost_plate)
+
+        # 将每个视差等级的cost图拼接成cost volume 注意要在第1个维度拼接 (第0个是batch)
+        cost_volume = tf.stack(cost_volume, axis=1)
+
+        return cost_volume
 
     def stacked_hourglass(self, inputs):
         return inputs, inputs, inputs
@@ -211,6 +239,7 @@ if __name__ == '__main__':
                      head_type=config.HEAD_STACKED_HOURGLASS, channels=config.IMG_N_CHANNEL, batch_size=18)
     psm_net.build_net()
     print(psm_net.ref_feature)
+    print(psm_net.cost_volume)
 
     with tf.Session() as sess:
         writer = tf.summary.FileWriter("./log", sess.graph)
