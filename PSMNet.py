@@ -17,6 +17,8 @@ class PSMNet:
                                           (None, self.img_height, self.img_width, self.channels), name='left_inputs')
         self.right_inputs = tf.placeholder(tf.float32,
                                            (None, self.img_height, self.img_width, self.channels), name='right_inputs')
+        self.groundtruth = tf.placeholder(tf.float32,
+                                          (None, self.img_height, self.img_width), name='groundtruth_disparity')
         self.is_training = tf.placeholder(tf.bool, name='is_training')
         self.estimation = None
 
@@ -35,6 +37,9 @@ class PSMNet:
             self.disparity = self.basic(self.cost_volume)
         else:
             raise NotImplementedError('Head Type \'{}\' Not Supported!!!'.format(self.head_type))
+
+        # 计算loss
+        self.loss = self.calc_loss(self.disparity_1, self.disparity_2, self.disparity_3, self.groundtruth)
 
     def cnn(self, inputs, weight_share=False):
         with tf.variable_scope('CNN_BASE'):
@@ -92,7 +97,7 @@ class PSMNet:
         空间金字塔模块
         :param inputs: 输入
         :param weight_share: 权重共享
-        :return:
+        :return: context特征
         """
         with tf.variable_scope('SPP'):
             # spp的四个分支
@@ -307,6 +312,22 @@ class PSMNet:
 
         return outputs, skip_out_1, skip_out_2
 
+    def calc_loss(self, disparity_1, disparity_2, disparity_3, groundtruth):
+        """
+        计算总的loss
+        :param disparity_1: 分支1视差图
+        :param disparity_2: 分支2视差图
+        :param disparity_3: 分支3视差图
+        :param groundtruth: label
+        :return: 总loss
+        """
+        with tf.variable_scope('LOSS'):
+            loss_coef = config.TRAIN_LOSS_COEF
+            loss = loss_coef[0] * self._smooth_l1_loss(disparity_1, groundtruth) \
+                   + loss_coef[1] * self._smooth_l1_loss(disparity_2, groundtruth) \
+                   + loss_coef[2] * self._smooth_l1_loss(disparity_3, groundtruth)
+        return loss
+
     def _build_conv_block(self, inputs, conv_function, filters, kernel_size, strides=1, dilation_rate=None,
                           layer_name='conv', apply_bn=True, apply_relu=True, reuse=False):
         # 构建卷积块
@@ -377,6 +398,30 @@ class PSMNet:
             outputs = tf.image.resize_images(outputs, size=origin_size)
 
             return outputs
+
+    def _smooth_l1_loss(self, estimation, groundtruth):
+        # 计算 smooth l1 loss
+        # https://github.com/rbgirshick/py-faster-rcnn/files/764206/SmoothL1Loss.1.pdf
+        with tf.variable_scope('smooth_l1_loss'):
+            # 计算像素差
+            diff = groundtruth - estimation
+            abs_diff = tf.abs(diff)
+
+            # 根据sml1-loss的定义 找到小于阈值的误差 注意这里不往前传梯度(相当于做判断)
+            sign_mask = tf.stop_gradient(tf.to_float(tf.less(abs_diff, 1)), name='sign_mask')
+
+            # 计算每个像素的loss
+            smooth_l1_loss_map = \
+                0.5 * tf.pow(diff, 2) * sign_mask \
+                + (abs_diff - 0.5) * (1.0 - sign_mask)
+
+            # 求所有batch每个像素的loss平均
+            loss = tf.reduce_mean(smooth_l1_loss_map, axis=None)
+            print(diff, abs_diff, sign_mask, smooth_l1_loss_map, loss)
+        return loss
+
+    def train(self, session):
+        pass
 
 
 if __name__ == '__main__':
