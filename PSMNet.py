@@ -88,6 +88,12 @@ class PSMNet:
             return outputs
 
     def spp(self, inputs, weight_share):
+        """
+        空间金字塔模块
+        :param inputs: 输入
+        :param weight_share: 权重共享
+        :return:
+        """
         with tf.variable_scope('SPP'):
             # spp的四个分支
             branches = [self._build_spp_branch(inputs, pool_size=pool_size,
@@ -129,26 +135,27 @@ class PSMNet:
         :param max_disp: 最大视差深度
         :return: cost-volume
         """
-        cost_volume = []
-        for d in range(max_disp // 4):
-            if d > 0:
-                # 左右两侧的视差cost 注意这里是在width维度计算的视差
-                left_shift = left_inputs[:, :, d:, :]
-                right_shift = left_inputs[:, :, :-d, :]
+        with tf.variable_scope('COST_VOLUME'):
+            cost_volume = []
+            for d in range(max_disp // 4):
+                if d > 0:
+                    # 左右两侧的视差cost 注意这里是在width维度计算的视差
+                    left_shift = left_inputs[:, :, d:, :]
+                    right_shift = left_inputs[:, :, :-d, :]
 
-                # 补0填充 在width的维度起始补0
-                left_shift = tf.pad(left_shift, paddings=[[0, 0], [0, 0], [d, 0], [0, 0]])
-                right_shift = tf.pad(right_shift, paddings=[[0, 0], [0, 0], [d, 0], [0, 0]])
+                    # 补0填充 在width的维度起始补0
+                    left_shift = tf.pad(left_shift, paddings=[[0, 0], [0, 0], [d, 0], [0, 0]])
+                    right_shift = tf.pad(right_shift, paddings=[[0, 0], [0, 0], [d, 0], [0, 0]])
 
-                # 在channel维度拼接
-                cost_plate = tf.concat([left_shift, right_shift], axis=-1)
-            else:
-                # d为0时直接拼接未经过shift的原图
-                cost_plate = tf.concat([left_inputs, right_inputs], axis=-1)
-            cost_volume.append(cost_plate)
+                    # 在channel维度拼接
+                    cost_plate = tf.concat([left_shift, right_shift], axis=-1)
+                else:
+                    # d为0时直接拼接未经过shift的原图
+                    cost_plate = tf.concat([left_inputs, right_inputs], axis=-1)
+                cost_volume.append(cost_plate)
 
-        # 将每个视差等级的cost图拼接成cost volume 注意要在第1个维度拼接 (第0个是batch)
-        cost_volume = tf.stack(cost_volume, axis=1)
+            # 将每个视差等级的cost图拼接成cost volume 注意要在第1个维度拼接 (第0个是batch)
+            cost_volume = tf.stack(cost_volume, axis=1)
 
         return cost_volume
 
