@@ -178,20 +178,80 @@ class PSMNet:
             # 三层stacked hourglass
             with tf.variable_scope('3Dstack1'):
                 outputs, _3Dstack1_1, _3Dstack1_3 = self.hourglass(outputs, None, None, _3Dconv1, name='3Dstack1')
+                # 回归输出
+                disparity_1, classify_skip_out = self.disparity_regression(outputs, pre=None,
+                                                                           name='output_1')
 
             with tf.variable_scope('3Dstack2'):
                 outputs, _, _3Dstack2_3 = self.hourglass(outputs, _3Dstack1_3, _3Dstack1_1, _3Dconv1, name='3Dstack2')
+                # 回归输出 加上一层的skip
+                disparity_2, classify_skip_out = self.disparity_regression(outputs, pre=classify_skip_out,
+                                                                           name='output_2')
 
             with tf.variable_scope('3Dstack3'):
                 outputs, _, _ = self.hourglass(outputs, _3Dstack2_3, _3Dstack1_1, _3Dconv1, name='3Dstack3')
+                # 回归输出 加上一层的skip
+                disparity_3, _ = self.disparity_regression(outputs, pre=classify_skip_out,
+                                                           name='output_3')
 
-        return outputs, outputs, outputs
+        return disparity_1, disparity_2, disparity_3
 
     def basic(self, inputs):
         return inputs
 
-    def disparity_regression(self, inputs, pre):
-        return inputs + pre
+    def disparity_regression(self, inputs, pre, name):
+        """
+        视差图回归
+        :param inputs: 输入的3d cost volume特征
+        :param pre: 前一个回归层的输出
+        :param name: 名称
+        :return: 回归得到的视差图,中间层的skip输出
+        """
+        with tf.variable_scope(name):
+            with tf.variable_scope('classify'):
+                # 普通3d卷积
+                outputs = self._build_conv_block(inputs, tf.layers.conv3d, filters=32, kernel_size=3,
+                                                 layer_name='conv')
+                # 聚合到1通道 且有一个中间skip connection出去
+                classify_skip_out = outputs = \
+                    self._build_conv_block(outputs, tf.layers.conv3d, filters=1, kernel_size=3,
+                                           apply_bn=False, apply_relu=False, layer_name='conv_agg')
+                # 加上前层的output
+                if pre is not None:
+                    outputs = tf.add(outputs, pre, name='add')
+
+            with tf.variable_scope('up_reg'):
+                # 升采样和回归
+                # 把最后一个维度的1通道squeeze掉
+                outputs = tf.squeeze(outputs, [4])
+
+                # 升采样4倍 注意这里是cost volume 而不是图像 需要使用3D升采样
+                outputs = tf.keras.layers.UpSampling3D(size=4)(outputs)
+
+                # 使用soft-attention 将cost回归成视差图
+                with tf.variable_scope('soft_attention'):
+                    # 计算原始视差图的softmax
+                    logits_volume = tf.nn.softmax(outputs, axis=1)
+
+                    # 和logits_map做点积的权重 就是视差的递增序列
+                    d_weight = tf.range(0, config.MAX_DISP, dtype=tf.float32, name='d_weight')
+                    # 这里要把tile扩增到和logit_volume一样的维度 为了进行广播运算(每个像素对应的视差柱和d_weight相乘)
+                    d_weight = tf.tile(
+                        tf.reshape(d_weight, shape=[1, config.MAX_DISP, 1, 1]),
+                        multiples=[tf.shape(logits_volume)[0], 1,
+                                   logits_volume.shape[2].value, logits_volume.shape[3].value]
+                    )
+
+                    # 乘积
+                    disparity = tf.reduce_sum(
+                        tf.multiply(logits_volume, d_weight),
+                        axis=1,
+                        name='soft_attention_dot'
+                    )
+
+                print(logits_volume, d_weight, disparity)
+
+            return disparity, classify_skip_out
 
     def hourglass(self, inputs, shortcut_1, shortcut_2, shortcut_3, name):
         """
@@ -201,7 +261,7 @@ class PSMNet:
         :param shortcut_2: 3Dstack1_1
         :param shortcut_3: 3Dconv1
         :param name: 名称
-        :return:
+        :return: 输出,stackX_1的skip输出,stackX_3的的skip输出
         """
         with tf.variable_scope(name + '_1'):
             # 第一层下采样
@@ -324,8 +384,6 @@ if __name__ == '__main__':
     psm_net = PSMNet(width=config.TRAIN_CROP_WIDTH, height=config.TRAIN_CROP_HEIGHT,
                      head_type=config.HEAD_STACKED_HOURGLASS, channels=config.IMG_N_CHANNEL, batch_size=18)
     psm_net.build_net()
-    print(psm_net.ref_feature)
-    print(psm_net.cost_volume)
 
     with tf.Session() as sess:
         writer = tf.summary.FileWriter("./log", sess.graph)
