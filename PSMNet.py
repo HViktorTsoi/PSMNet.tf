@@ -28,13 +28,13 @@ class PSMNet:
         # 计算cost volume
         self.cost_volume = self.cost_volume_aggregation(self.ref_feature, self.target_feature, config.MAX_DISP)
 
-        # # 实现3d cnn以及视差图估计
-        # if self.head_type == config.HEAD_STACKED_HOURGLASS:
-        #     self.disparity_1, self.disparity_2, self.disparity_3 = self.stacked_hourglass(self.cost_volume)
-        # elif self.head_type == config.HEAD_BASIC:
-        #     self.disparity = self.basic(self.cost_volume)
-        # else:
-        #     raise NotImplementedError('Head Type \'{}\' Not Supported!!!'.format(self.head_type))
+        # 实现3d cnn以及视差图估计
+        if self.head_type == config.HEAD_STACKED_HOURGLASS:
+            self.disparity_1, self.disparity_2, self.disparity_3 = self.stacked_hourglass(self.cost_volume)
+        elif self.head_type == config.HEAD_BASIC:
+            self.disparity = self.basic(self.cost_volume)
+        else:
+            raise NotImplementedError('Head Type \'{}\' Not Supported!!!'.format(self.head_type))
 
     def cnn(self, inputs, weight_share=False):
         with tf.variable_scope('CNN_BASE'):
@@ -153,13 +153,92 @@ class PSMNet:
         return cost_volume
 
     def stacked_hourglass(self, inputs):
-        return inputs, inputs, inputs
+        """
+        3D卷积的stack hourglass
+        :param inputs: 输入
+        :return: 3个分支的disparity prediction
+        """
+        with tf.variable_scope('ST_HGLS'):
+            outputs = inputs
+            # 两层普通3D卷积
+            with tf.variable_scope('3Dconv0'):
+                for layer_id in range(2):
+                    outputs = self._build_conv_block(outputs, tf.layers.conv3d, filters=32, kernel_size=3,
+                                                     layer_name='3Dconv0_{}'.format(layer_id))
+            with tf.variable_scope('3Dconv1'):
+                _3Dconv1 = outputs = self._build_residual_block(outputs, tf.layers.conv3d, filters=32, kernel_size=3,
+                                                                layer_name='res_3Dconv1')
+            # 三层stacked hourglass
+            with tf.variable_scope('3Dstack1'):
+                outputs, _3Dstack1_1, _3Dstack1_3 = self.hourglass(outputs, None, None, _3Dconv1, name='3Dstack1')
+
+            with tf.variable_scope('3Dstack2'):
+                outputs, _, _3Dstack2_3 = self.hourglass(outputs, _3Dstack1_3, _3Dstack1_1, _3Dconv1, name='3Dstack2')
+
+            with tf.variable_scope('3Dstack3'):
+                outputs, _, _ = self.hourglass(outputs, _3Dstack2_3, _3Dstack1_1, _3Dconv1, name='3Dstack3')
+
+        return outputs, outputs, outputs
 
     def basic(self, inputs):
         return inputs
 
     def disparity_regression(self, inputs, pre):
         return inputs + pre
+
+    def hourglass(self, inputs, shortcut_1, shortcut_2, shortcut_3, name):
+        """
+        # 构建hourglass块
+        :param inputs: 上一层输入
+        :param shortcut_1: 3Dstack(1,2)_3
+        :param shortcut_2: 3Dstack1_1
+        :param shortcut_3: 3Dconv1
+        :param name: 名称
+        :return:
+        """
+        with tf.variable_scope(name + '_1'):
+            # 第一层下采样
+            outputs = self._build_conv_block(inputs, tf.layers.conv3d, filters=64, kernel_size=3,
+                                             strides=2, layer_name='downsample')
+            outputs = self._build_conv_block(outputs, tf.layers.conv3d, filters=64, kernel_size=3,
+                                             apply_relu=False, layer_name='3Dconv')
+            if shortcut_1 is not None:
+                # stack第一层之后加上前边的sortcut 注意stack1_1不需要加shortcut
+                outputs = tf.add(outputs, shortcut_1, name='add')
+
+            # skip connection相加之后再relu 并作为shortcut输出
+            skip_out_1 = outputs = tf.nn.relu(outputs, name='relu')
+
+        with tf.variable_scope(name + '_2'):
+            # 第二层下采样
+            outputs = self._build_conv_block(outputs, tf.layers.conv3d, filters=64, kernel_size=3,
+                                             strides=2, layer_name='downsample')
+            outputs = self._build_conv_block(outputs, tf.layers.conv3d, filters=64, kernel_size=3,
+                                             layer_name='3Dconv')
+
+        with tf.variable_scope(name + '_3'):
+            # 上采样转置卷积
+            outputs = self._build_conv_block(outputs, tf.layers.conv3d_transpose, filters=64, kernel_size=3,
+                                             strides=2, apply_relu=False, layer_name='3Ddeconv')
+            # 加skip connection
+            if shortcut_2 is not None:
+                # 如果是其他hourglass中的 加传进来的参数shortcut_2
+                outputs = tf.add(outputs, shortcut_2, name='add')
+            else:
+                # 如果是hourglass1中的 直接加本层的_1
+                outputs = tf.add(outputs, skip_out_1, name='add')
+
+            # skip connection相加之后再relu 并作为shortcut输出
+            skip_out_2 = outputs = tf.nn.relu(outputs, name='relu')
+
+        with tf.variable_scope(name + '_4'):
+            # 上采样转置卷积
+            outputs = self._build_conv_block(outputs, tf.layers.conv3d_transpose, filters=32, kernel_size=3,
+                                             strides=2, apply_relu=False, layer_name='3Ddeconv')
+            # 结果不加relu
+            outputs = tf.add(outputs, shortcut_3, name='add')
+
+        return outputs, skip_out_1, skip_out_2
 
     def _build_conv_block(self, inputs, conv_function, filters, kernel_size, strides=1, dilation_rate=None,
                           layer_name='conv', apply_bn=True, apply_relu=True, reuse=False):
