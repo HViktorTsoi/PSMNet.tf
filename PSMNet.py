@@ -41,9 +41,13 @@ class PSMNet:
 
         # 计算loss
         self.loss = self.calc_loss(self.disparity_1, self.disparity_2, self.disparity_3, self.groundtruth)
+        tf.summary.scalar("loss", self.loss)
 
         # 优化
         self.train_op = self.optimizer.minimize(self.loss)
+
+        # 日志
+        self.train_log = tf.summary.merge_all()
 
     def cnn(self, inputs, weight_share=False):
         with tf.variable_scope('CNN_BASE'):
@@ -436,8 +440,8 @@ class PSMNet:
         :return: loss
         """
         # optimize and forward
-        loss, _ = session.run(
-            [self.loss, self.train_op],
+        loss, _, log = session.run(
+            [self.loss, self.train_op, self.train_log],
             feed_dict={
                 self.left_inputs: left_imgs,
                 self.right_inputs: right_imgs,
@@ -445,7 +449,7 @@ class PSMNet:
                 self.is_training: True
             }
         )
-        return loss
+        return loss, log
 
 
 if __name__ == '__main__':
