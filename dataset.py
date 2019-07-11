@@ -82,6 +82,7 @@ def get_dataset(data_path='dataset/', epoch=10, batch_size=18,
     # 读取文件路径
     all_left_img, all_right_img, all_left_disp, \
     test_left_img, test_right_img, test_left_disp = lt.dataloader(data_path)
+    dataset_len = len(all_right_img)
     all_left_img = tf.constant(all_left_img)
     all_right_img = tf.constant(all_right_img)
     all_disp = tf.constant(all_left_disp)
@@ -96,11 +97,11 @@ def get_dataset(data_path='dataset/', epoch=10, batch_size=18,
         .repeat(epoch) \
         .prefetch(batch_size)
 
-    return dataset
+    return dataset, dataset_len
 
 
 if __name__ == '__main__':
-    dataset = get_dataset(is_training=True)
+    dataset, _ = get_dataset(is_training=True)
     iterator = dataset.make_initializable_iterator()
     next_element = iterator.get_next()
     with tf.Session() as sess:
