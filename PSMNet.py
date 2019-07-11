@@ -6,7 +6,7 @@ import config
 
 class PSMNet:
 
-    def __init__(self, width, height, channels, batch_size, head_type, is_training=True):
+    def __init__(self, width, height, channels, batch_size, head_type):
         self.img_width = width
         self.img_height = height
         self.channels = channels
@@ -20,7 +20,8 @@ class PSMNet:
         self.groundtruth = tf.placeholder(tf.float32,
                                           (None, self.img_height, self.img_width), name='groundtruth_disparity')
         self.is_training = tf.placeholder(tf.bool, name='is_training')
-        self.estimation = None
+
+        self.optimizer = tf.train.AdamOptimizer(config.TRAIN_LR)
 
     def build_net(self):
         # 提特征 注意建图时右分支和左分支共享权重
@@ -40,6 +41,9 @@ class PSMNet:
 
         # 计算loss
         self.loss = self.calc_loss(self.disparity_1, self.disparity_2, self.disparity_3, self.groundtruth)
+
+        # 优化
+        self.train_op = self.optimizer.minimize(self.loss)
 
     def cnn(self, inputs, weight_share=False):
         with tf.variable_scope('CNN_BASE'):
@@ -420,8 +424,26 @@ class PSMNet:
             print(diff, abs_diff, sign_mask, smooth_l1_loss_map, loss)
         return loss
 
-    def train(self, session):
-        pass
+    def train(self, session: tf.Session, left_imgs, right_imgs, disp_gt):
+        """
+        训练
+        :param session: tf.session
+        :param left_imgs: 左侧视图batch
+        :param right_imgs: 右侧视图batch
+        :param disp_gt: 视差groundtruth
+        :return: loss
+        """
+        # optimize and forward
+        loss, _ = session.run(
+            [self.loss, self.train_op],
+            feed_dict={
+                self.left_inputs: left_imgs,
+                self.right_inputs: right_imgs,
+                self.groundtruth: disp_gt,
+                self.is_training: True
+            }
+        )
+        return loss
 
 
 if __name__ == '__main__':
