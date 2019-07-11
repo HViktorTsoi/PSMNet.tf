@@ -121,7 +121,6 @@ class PSMNet:
                                             reuse=weight_share, layer_name='fusion_conv_3x3')
             fusion = self._build_conv_block(fusion, tf.layers.conv2d, filters=32, kernel_size=1,
                                             reuse=weight_share, layer_name='fusion_conv_1x1')
-            print(outputs, fusion)
             return fusion
 
     def feature_extraction(self, inputs, weight_share=False):
@@ -235,7 +234,12 @@ class PSMNet:
                 outputs = tf.squeeze(outputs, [4])
 
                 # 升采样4倍 注意这里是cost volume 而不是图像 需要使用3D升采样
-                outputs = tf.keras.layers.UpSampling3D(size=4)(outputs)
+                # outputs = tf.keras.layers.UpSampling3D(size=4)(outputs)
+                outputs = tf.transpose(
+                    tf.image.resize_images(
+                        tf.transpose(outputs, perm=[0, 2, 3, 1])
+                        , size=(self.img_height, self.img_width)
+                    ), perm=[0, 3, 1, 2])
 
                 # 使用soft-attention 将cost回归成视差图
                 with tf.variable_scope('soft_attention'):
@@ -243,10 +247,10 @@ class PSMNet:
                     logits_volume = tf.nn.softmax(outputs, axis=1)
 
                     # 和logits_map做点积的权重 就是视差的递增序列
-                    d_weight = tf.range(0, config.MAX_DISP, dtype=tf.float32, name='d_weight')
+                    d_weight = tf.range(0, config.MAX_DISP // 4, dtype=tf.float32, name='d_weight')
                     # 这里要把tile扩增到和logit_volume一样的维度 为了进行广播运算(每个像素对应的视差柱和d_weight相乘)
                     d_weight = tf.tile(
-                        tf.reshape(d_weight, shape=[1, config.MAX_DISP, 1, 1]),
+                        tf.reshape(d_weight, shape=[1, config.MAX_DISP // 4, 1, 1]),
                         multiples=[tf.shape(logits_volume)[0], 1,
                                    logits_volume.shape[2].value, logits_volume.shape[3].value]
                     )
@@ -257,8 +261,6 @@ class PSMNet:
                         axis=1,
                         name='soft_attention_dot'
                     )
-
-                print(logits_volume, d_weight, disparity)
 
             return disparity, classify_skip_out
 
@@ -420,8 +422,8 @@ class PSMNet:
                 + (abs_diff - 0.5) * (1.0 - sign_mask)
 
             # 求所有batch每个像素的loss平均
-            loss = tf.reduce_mean(smooth_l1_loss_map, axis=None)
-            print(diff, abs_diff, sign_mask, smooth_l1_loss_map, loss)
+            loss = tf.reduce_mean(tf.reduce_mean(smooth_l1_loss_map, axis=[1, 2]))
+            # print(diff, abs_diff, sign_mask, smooth_l1_loss_map, loss)
         return loss
 
     def train(self, session: tf.Session, left_imgs, right_imgs, disp_gt):
