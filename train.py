@@ -1,5 +1,6 @@
-import cv2
 import os
+
+import cv2
 
 import tensorflow as tf
 
@@ -8,12 +9,14 @@ import utils
 from PSMNet import PSMNet
 import matplotlib.pyplot as plt
 import numpy as np
-from dataloader.sceneflow_loader import DataLoaderSceneFlow
+from dataloader.data_loader import DataLoaderSceneFlow, DataLoaderKITTI
 
 
-def train(ckpt_path):
+def train(ckpt_path, train_data_loader, val_data_loader):
     """
     训练
+    :param val_data_loader:
+    :param train_data_loader:
     :param ckpt_path:
     :return:
     """
@@ -26,16 +29,13 @@ def train(ckpt_path):
         saver = tf.train.Saver()
         writer = tf.summary.FileWriter('log/', sess.graph)
         global_step = 0
-        # 载入数据集
-        data_loader = DataLoaderSceneFlow(data_path='./dataset/', batch_size=config.TRAIN_BATCH_SIZE,
-                                          max_disp=config.MAX_DISP)
         # 训练
         sess.run(tf.global_variables_initializer())
         saver.restore(sess, save_path=ckpt_path)
         for epoch in range(1, config.TRAIN_EPOCH + 1):
             epoch_loss = 0
             step_ave_loss = 0
-            for step, (imgL_crop, imgR_crop, groundtruth) in enumerate(data_loader.generator(is_training=True)):
+            for step, (imgL_crop, imgR_crop, groundtruth) in enumerate(train_data_loader.generator(is_training=True)):
                 loss, log = model.train(
                     sess,
                     left_imgs=imgL_crop,
@@ -49,20 +49,20 @@ def train(ckpt_path):
                 writer.add_summary(log, global_step)
                 if step % config.LOG_INTERVAL == 0 and step > 0:
                     print('EPOCH {:04d} - {:04d}/{:04d}  LOSS: {:.4f}'.format(
-                        epoch, step, data_loader.train_size // config.TRAIN_BATCH_SIZE,
+                        epoch, step, train_data_loader.train_size // config.TRAIN_BATCH_SIZE,
                                      step_ave_loss / config.LOG_INTERVAL
                     ))
                     step_ave_loss = 0
             print('EPOCH LOSS: {}'.format(epoch_loss / step))
 
             # 验证
-            val(sess, model, vis=False)
+            val(sess, model, val_data_loader, vis=False)
 
             # 保存模型
             saver.save(sess, save_path='./ckpt/scene_flow_hgls.ckpt', global_step=epoch)
 
 
-def val(sess, model, vis=False):
+def val(sess, model, data_loader, vis=False):
     """
     验证
     :param sess:
@@ -70,8 +70,6 @@ def val(sess, model, vis=False):
     :param vis:
     :return:
     """
-    data_loader = DataLoaderSceneFlow(data_path='./dataset/', batch_size=config.VAL_BATCH_SIZE,
-                                      max_disp=config.MAX_DISP)
     error_total = []
     # 验证
     for step, (imgL_crop, imgR_crop, groundtruth) in enumerate(data_loader.generator(is_training=False)):
@@ -124,4 +122,9 @@ def tests(ckpt_path, vis=False):
 if __name__ == '__main__':
     # os.environ['CUDA_VISIBLE_DEVICES'] = '1'
     # tests(ckpt_path='./ckpt/scene_flow_hgls.ckpt-32', vis=True)
-    train(ckpt_path='./ckpt/scene_flow_hgls.ckpt-32')
+    train(
+        ckpt_path='./ckpt/scene_flow_hgls.ckpt-6',
+        # 载入数据集
+        train_data_loader=DataLoaderSceneFlow(batch_size=config.TRAIN_BATCH_SIZE, max_disp=config.MAX_DISP),
+        val_data_loader=DataLoaderSceneFlow(batch_size=config.VAL_BATCH_SIZE, max_disp=config.MAX_DISP),
+    )

@@ -17,13 +17,15 @@ from PIL import Image
 
 
 class DataLoaderSceneFlow(object):
-    def __init__(self, data_path, batch_size, patch_size=(256, 512), max_disp=129, val_size=500):
+    data_path = './dataset/'
+
+    def __init__(self, batch_size, patch_size=(256, 512), max_disp=129, val_size=500):
         self.batch_size = batch_size
         self.patch_size = patch_size
         self.max_disp = max_disp
         self.val_size = val_size
         all_left_img, all_right_img, all_left_disp, \
-        test_left_img, test_right_img, test_left_disp = lt.get_sceneflow_img(data_path)
+        test_left_img, test_right_img, test_left_disp = lt.get_sceneflow_img(self.data_path)
         self.data = list(zip(all_left_img, all_right_img, all_left_disp))
         self.train_size = len(all_left_img) - self.val_size
         self.img_height, self.img_width = config.SCENEFLOW_SIZE
@@ -116,13 +118,15 @@ class DataLoaderSceneFlow(object):
 
 
 class DataLoaderKITTI(object):
-    def __init__(self, data_path, batch_size, patch_size=[256, 512], max_disp=192,
+    data_path = './dataset/data_scene_flow_2015/training/'
+
+    def __init__(self, batch_size, patch_size=[256, 512], max_disp=192,
                  val_size=40):
         self.batch_size = batch_size
         self.patch_size = patch_size
         self.max_disp = max_disp
         self.val_size = val_size
-        self.left_data, self.right_data, self.labels = lt.get_kitti_2015_img(data_path)
+        self.left_data, self.right_data, self.labels = lt.get_kitti_2015_img(self.data_path)
         self.left_data.sort(key=str.lower)
         self.right_data.sort(key=str.lower)
         self.labels.sort(key=str.lower)
