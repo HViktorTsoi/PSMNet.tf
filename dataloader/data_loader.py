@@ -11,6 +11,7 @@ import cv2
 import os
 
 import config
+import utils
 from utils import readPFM
 import dataloader.list_file as lt
 from PIL import Image
@@ -89,13 +90,13 @@ class DataLoaderSceneFlow(object):
             assert x.shape[:2] == (self.img_height, self.img_width)
             x = cv2.cvtColor(x, cv2.COLOR_BGR2RGB)
             x = x[crop_x: crop_x + self.patch_size[0], crop_y: crop_y + self.patch_size[1], :]
-            x = self.mean_std(x)
+            x = utils.mean_std(x)
             batch_left.append(x)
 
             y = cv2.imread(y)
             y = cv2.cvtColor(y, cv2.COLOR_BGR2RGB)
             y = y[crop_x: crop_x + self.patch_size[0], crop_y: crop_y + self.patch_size[1], :]
-            y = self.mean_std(y)
+            y = utils.mean_std(y)
             batch_right.append(y)
 
             z = readPFM(z)
@@ -104,17 +105,6 @@ class DataLoaderSceneFlow(object):
             z[z > (self.max_disp - 1)] = self.max_disp - 1
             batch_label.append(z)
         return batch_left, batch_right, batch_label
-
-    @staticmethod
-    def mean_std(inputs):
-        inputs = np.float32(inputs) / 255.
-        inputs[:, :, 0] -= 0.485
-        inputs[:, :, 0] /= 0.229
-        inputs[:, :, 1] -= 0.456
-        inputs[:, :, 1] /= 0.224
-        inputs[:, :, 2] -= 0.406
-        inputs[:, :, 2] /= 0.225
-        return inputs
 
 
 class DataLoaderKITTI(object):
@@ -193,37 +183,52 @@ class DataLoaderKITTI(object):
             assert x.shape[:2] == (self.img_height, self.img_width)
             x = cv2.cvtColor(x, cv2.COLOR_BGR2RGB)
             x = x[crop_x: crop_x + self.patch_size[0], crop_y: crop_y + self.patch_size[1], :]
-            x = self.mean_std(x)
+            x = utils.mean_std(x)
             batch_left.append(x)
 
             y = cv2.resize(cv2.imread(y), (self.img_width, self.img_height))
             y = cv2.cvtColor(y, cv2.COLOR_BGR2RGB)
             y = y[crop_x: crop_x + self.patch_size[0], crop_y: crop_y + self.patch_size[1], :]
-            y = self.mean_std(y)
+            y = utils.mean_std(y)
             batch_right.append(y)
 
             z = Image.open(z)
             z = cv2.resize(np.ascontiguousarray(z, dtype=np.float32) / 256, (self.img_width, self.img_height))
 
             # 加上最大值的限制
-            z[z > (self.max_disp - 1)] = self.max_disp - 1
+            # z[z > (self.max_disp - 1)] = self.max_disp - 1
 
             z = z[crop_x: crop_x + self.patch_size[0], crop_y: crop_y + self.patch_size[1]]
             batch_label.append(z)
         return batch_left, batch_right, batch_label
 
-    @staticmethod
-    def mean_std(inputs):
-        inputs = np.float32(inputs) / 255.
-        inputs[:, :, 0] -= 0.485
-        inputs[:, :, 0] /= 0.229
-        inputs[:, :, 1] -= 0.456
-        inputs[:, :, 1] /= 0.224
-        inputs[:, :, 2] -= 0.406
-        inputs[:, :, 2] /= 0.225
-        return inputs
+
+class DataLoaderKITTI_SUBMISSION(object):
+    data_path = './dataset/data_scene_flow_2015/testing/'
+
+    def generator(self, is_training=False):
+        """
+        生成测试图像
+        :return:
+        """
+        test_left_img, test_right_img = lt.get_kitti_2015_submission(self.data_path)
+        for x, y in zip(test_left_img, test_right_img):
+            x = cv2.imread(x)
+            x = cv2.cvtColor(x, cv2.COLOR_BGR2RGB)
+            x = utils.mean_std(x)
+
+            y = cv2.imread(y)
+            y = cv2.cvtColor(y, cv2.COLOR_BGR2RGB)
+            y = utils.mean_std(y)
+
+            # pad to (384, 1248)
+            top_pad = config.KITTI2015_SIZE[0] - x.shape[0]
+            left_pad = config.KITTI2015_SIZE[1] - x.shape[1]
+            x = np.lib.pad(x, ((top_pad, 0), (0, left_pad), (0, 0)), mode='constant', constant_values=0)
+            y = np.lib.pad(y, ((top_pad, 0), (0, left_pad), (0, 0)), mode='constant', constant_values=0)
+            yield np.expand_dims(x, axis=0), np.expand_dims(y, axis=0), None
 
 
 if __name__ == '__main__':
     # loader = DataLoaderSceneFlow(data_path='../dataset/', batch_size=10, max_disp=192)
-    loader = DataLoaderKITTI(data_path='../dataset/data_scene_flow_2015/training/', batch_size=10, max_disp=192)
+    loader = DataLoaderKITTI(batch_size=10, max_disp=192)
