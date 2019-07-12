@@ -1,10 +1,27 @@
 import re
+
 import numpy as np
-import sys
+
+import config
+
+
+def compute_npx_error(prediction, gt, n):
+    # computing n-px error
+    true_disp = gt
+    index = np.argwhere(true_disp > 0).T
+    gt[index[0][:], index[1][:], index[2][:]] = np.abs(
+        true_disp[index[0][:], index[1][:], index[2][:]] - prediction[index[0][:], index[1][:], index[2][:]])
+
+    correct = (gt[index[0][:], index[1][:], index[2][:]] < n) | \
+              (gt[index[0][:], index[1][:], index[2][:]] < true_disp[index[0][:], index[1][:], index[2][:]] * 0.05)
+
+    return 1 - (float(np.sum(correct)) / float(len(index[0])))
 
 
 def readPFM(file):
-    file = open(file.numpy().decode(), 'rb')
+    if not isinstance(file, str):
+        file = file.numpy().decode()
+    file = open(file, 'rb')
 
     color = None
     width = None
@@ -38,4 +55,7 @@ def readPFM(file):
 
     data = np.reshape(data, shape)
     data = np.flipud(data)
+
+    # 加入maxdisp限制
+    data[data > (config.MAX_DISP - 1)] = config.MAX_DISP - 1
     return data

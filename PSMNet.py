@@ -452,6 +452,24 @@ class PSMNet:
         )
         return loss, log
 
+    def predict(self, session: tf.Session, left_imgs, right_imgs):
+        """
+        测试
+        :param session: tf.session
+        :param left_imgs: 左侧视图batch
+        :param right_imgs: 右侧视图batch
+        :return: prediction
+        """
+        prediction = session.run(
+            self.disparity_3,
+            feed_dict={
+                self.left_inputs: left_imgs,
+                self.right_inputs: right_imgs,
+                self.is_training: True  # 这里仍然需要设置为true bn的问题需要确认
+            }
+        )
+        return prediction
+
 
 if __name__ == '__main__':
     print(config.TRAIN_CROP_WIDTH, config.TRAIN_CROP_HEIGHT, )

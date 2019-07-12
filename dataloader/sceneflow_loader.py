@@ -9,7 +9,7 @@ import numpy as np
 import random
 import cv2
 import os
-from dataloader.readpfm import readPFM
+from utils import readPFM
 import dataloader.listflowfile as lt
 
 
@@ -20,7 +20,7 @@ class DataLoaderSceneFlow(object):
         self.max_disp = max_disp
         self.val_size = val_size
         all_left_img, all_right_img, all_left_disp, \
-        test_left_img, test_right_img, test_left_disp = lt.dataloader(data_path)
+        test_left_img, test_right_img, test_left_disp = lt.get_sceneflow_img(data_path)
         self.data = list(zip(all_left_img, all_right_img, all_left_disp))
         self.train_size = len(all_left_img) - self.val_size
 

@@ -1,8 +1,13 @@
+import random
+
 import tensorflow as tf
 
 import config
 import dataloader.listflowfile as lt
-from dataloader import readpfm as rp
+from utils import readPFM
+from dataloader.load_SceneFlow import DataLoaderSceneFlow
+
+import matplotlib.pyplot as plt
 
 
 def img_loader(path):
@@ -51,7 +56,7 @@ def load_image_disp(left_path, right_path, disp_path, is_training):
     """
     left_img = img_loader(left_path)
     right_img = img_loader(right_path)
-    disp = tf.py_function(rp.readPFM, [disp_path], tf.float32)
+    disp = tf.py_function(readPFM, [disp_path], tf.float32)
 
     if is_training:
         # 训练时随机裁剪
@@ -81,8 +86,12 @@ def get_dataset(data_path='dataset/', epoch=10, batch_size=18,
                 num_threads=10, shuffle_buffer_size=100, is_training=True, ):
     # 读取文件路径
     all_left_img, all_right_img, all_left_disp, \
-    test_left_img, test_right_img, test_left_disp = lt.dataloader(data_path)
+    test_left_img, test_right_img, test_left_disp = lt.get_sceneflow_img(data_path)
     dataset_len = len(all_right_img)
+    # 随机排列
+    random.shuffle(all_left_img)
+    random.shuffle(all_right_img)
+    random.shuffle(all_left_disp)
     all_left_img = tf.constant(all_left_img)
     all_right_img = tf.constant(all_right_img)
     all_disp = tf.constant(all_left_disp)
@@ -108,11 +117,22 @@ if __name__ == '__main__':
         sess.run(iterator.initializer)
         for _ in range(10):
             X = sess.run(next_element)
-            # import matplotlib.pyplot as plt
-            # plt.imshow(X[0][0])
-            # plt.show()
-            # plt.imshow(X[1][0])
-            # plt.show()
-            # plt.imshow(X[2][0])
-            # plt.show()
+
+            plt.imshow(X[0][0])
+            plt.show()
+            plt.imshow(X[1][0])
+            plt.show()
+            plt.imshow(X[2][0])
+            plt.show()
             print(X[0].shape)
+
+    # dg = DataLoaderSceneFlow(data_path='./dataset/', batch_size=config.TRAIN_BATCH_SIZE, max_disp=192)
+    # for step, (imgL_crop, imgR_crop, disp_crop_L) in enumerate(dg.generator(is_training=True)):
+    #     plt.imshow(imgL_crop[0])
+    #     plt.show()
+    #     plt.imshow(imgR_crop[0])
+    #     plt.show()
+    #     plt.imshow(disp_crop_L[0])
+    #     plt.show()
+    #
+    #     if step > 10: break
