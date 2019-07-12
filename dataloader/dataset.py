@@ -5,7 +5,7 @@ import tensorflow as tf
 import config
 import dataloader.list_file as lt
 from utils import readPFM
-from dataloader.sceneflow_loader import DataLoaderSceneFlow
+from dataloader.data_loader import DataLoaderKITTI
 
 import matplotlib.pyplot as plt
 
@@ -110,29 +110,31 @@ def get_dataset(data_path='dataset/', epoch=10, batch_size=18,
 
 
 if __name__ == '__main__':
-    dataset, _ = get_dataset(is_training=True)
-    iterator = dataset.make_initializable_iterator()
-    next_element = iterator.get_next()
-    with tf.Session() as sess:
-        sess.run(iterator.initializer)
-        for _ in range(10):
-            X = sess.run(next_element)
-
-            plt.imshow(X[0][0])
-            plt.show()
-            plt.imshow(X[1][0])
-            plt.show()
-            plt.imshow(X[2][0])
-            plt.show()
-            print(X[0].shape)
+    # dataset, _ = get_dataset(is_training=True)
+    # iterator = dataset.make_initializable_iterator()
+    # next_element = iterator.get_next()
+    # with tf.Session() as sess:
+    #     sess.run(iterator.initializer)
+    #     for _ in range(10):
+    #         X = sess.run(next_element)
+    #
+    #         plt.imshow(X[0][0])
+    #         plt.show()
+    #         plt.imshow(X[1][0])
+    #         plt.show()
+    #         plt.imshow(X[2][0])
+    #         plt.show()
+    #         print(X[0].shape)
 
     # dg = DataLoaderSceneFlow(data_path='./dataset/', batch_size=config.TRAIN_BATCH_SIZE, max_disp=192)
-    # for step, (imgL_crop, imgR_crop, disp_crop_L) in enumerate(dg.generator(is_training=True)):
-    #     plt.imshow(imgL_crop[0])
-    #     plt.show()
-    #     plt.imshow(imgR_crop[0])
-    #     plt.show()
-    #     plt.imshow(disp_crop_L[0])
-    #     plt.show()
-    #
-    #     if step > 10: break
+    dg = DataLoaderKITTI(data_path='./dataset/data_scene_flow_2015/training/', batch_size=config.TRAIN_BATCH_SIZE,
+                         max_disp=192)
+    for step, (imgL_crop, imgR_crop, disp_crop_L) in enumerate(dg.generator(is_training=True)):
+        plt.imshow(imgL_crop[0])
+        plt.show()
+        plt.imshow(imgR_crop[0])
+        plt.show()
+        plt.imshow(disp_crop_L[0])
+        plt.show()
+
+        if step > 10: break
