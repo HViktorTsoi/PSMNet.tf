@@ -206,13 +206,15 @@ class DataLoaderKITTI(object):
 class DataLoaderKITTI_SUBMISSION(object):
     data_path = './dataset/data_scene_flow_2015/testing/'
 
+    def __init__(self):
+        self.test_left_img, self.test_right_img = lt.get_kitti_2015_submission(self.data_path)
+
     def generator(self, is_training=False):
         """
         生成测试图像
         :return:
         """
-        test_left_img, test_right_img = lt.get_kitti_2015_submission(self.data_path)
-        for x, y in zip(test_left_img, test_right_img):
+        for x, y in zip(self.test_left_img, self.test_right_img):
             x = cv2.imread(x)
             x = cv2.cvtColor(x, cv2.COLOR_BGR2RGB)
             x = utils.mean_std(x)
