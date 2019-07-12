@@ -239,6 +239,7 @@ class PSMNet:
 
                 # 升采样4倍 注意这里是cost volume 而不是图像 需要使用3D升采样
                 # outputs = tf.keras.layers.UpSampling3D(size=4)(outputs)
+                # 升采样4倍 修复了3D升采样的bug
                 outputs = tf.transpose(
                     tf.image.resize_images(
                         tf.transpose(outputs, perm=[0, 2, 3, 1])
@@ -251,7 +252,7 @@ class PSMNet:
                     logits_volume = tf.nn.softmax(outputs, axis=1)
 
                     # 和logits_map做点积的权重 就是视差的递增序列
-                    d_weight = tf.range(0, config.MAX_DISP // 4, dtype=tf.float32, name='d_weight')
+                    d_weight = tf.range(0, config.MAX_DISP, delta=4, dtype=tf.float32, name='d_weight')
                     # 这里要把tile扩增到和logit_volume一样的维度 为了进行广播运算(每个像素对应的视差柱和d_weight相乘)
                     d_weight = tf.tile(
                         tf.reshape(d_weight, shape=[1, config.MAX_DISP // 4, 1, 1]),
