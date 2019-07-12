@@ -59,3 +59,14 @@ def readPFM(file):
     # 加入maxdisp限制
     data[data > (config.MAX_DISP - 1)] = config.MAX_DISP - 1
     return data
+
+
+def mean_std(inputs):
+    inputs = np.float32(inputs) / 255.
+    inputs[:, :, 0] -= 0.485
+    inputs[:, :, 0] /= 0.229
+    inputs[:, :, 1] -= 0.456
+    inputs[:, :, 1] /= 0.224
+    inputs[:, :, 2] -= 0.406
+    inputs[:, :, 2] /= 0.225
+    return inputs
