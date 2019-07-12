@@ -1,40 +1,36 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Apr 10 15:13:35 2019
-
-@author: Administrator
-"""
-
 import numpy as np
 import random
 import cv2
 import os
-from utils import readPFM
-import dataloader.list_file as lt
+from PIL import Image
 
 
-class DataLoaderSceneFlow(object):
-    def __init__(self, data_path, batch_size, patch_size=(256, 512), max_disp=129, val_size=500):
+class DataLoaderKITTI(object):
+    def __init__(self, left_path, right_path, gt_path, batch_size, patch_size=[256, 512], max_disp=192):
+        self.left_path = left_path
+        self.right_path = right_path
+        self.gt_path = gt_path
         self.batch_size = batch_size
         self.patch_size = patch_size
         self.max_disp = max_disp
-        self.val_size = val_size
-        all_left_img, all_right_img, all_left_disp, \
-        test_left_img, test_right_img, test_left_disp = lt.get_sceneflow_img(data_path)
-        self.data = list(zip(all_left_img, all_right_img, all_left_disp))
-        self.train_size = len(all_left_img) - self.val_size
+        self.left_data = os.listdir(self.left_path)
+        self.right_data = os.listdir(self.right_path)
+        self.labels = os.listdir(self.gt_path)
+        self.left_data.sort(key=str.lower)
+        self.right_data.sort(key=str.lower)
+        self.labels.sort(key=str.lower)
 
     def generator(self, is_training=True):
 
-        train_left = [x[0] for x in self.data[self.val_size:]]
-        train_right = [x[1] for x in self.data[self.val_size:]]
-        train_labels = [x[2] for x in self.data[self.val_size:]]
+        train_left = self.left_data
+        train_right = self.right_data
+        train_labels = self.labels
 
-        val_left = [x[0] for x in self.data[:self.val_size]]
-        val_right = [x[1] for x in self.data[:self.val_size]]
-        val_labels = [x[2] for x in self.data[:self.val_size]]
+        val_left = self.left_data[:40]
+        val_right = self.right_data[:40]
+        val_labels = self.labels[:40]
 
-        index = [i for i in range(len(train_labels))]  # 8664*7/8
+        index = [i for i in range(200)]
         random.shuffle(index)
         shuffled_labels = []
         shuffled_left_data = []
@@ -45,7 +41,7 @@ class DataLoaderSceneFlow(object):
             shuffled_right_data.append(train_right[i])
             shuffled_labels.append(train_labels[i])
         if is_training:
-            for j in range(len(train_labels) // self.batch_size):
+            for j in range(200 // self.batch_size):
                 left, right, label = self.load_batch(shuffled_left_data[j * self.batch_size: (j + 1) * self.batch_size],
                                                      shuffled_right_data[
                                                      j * self.batch_size: (j + 1) * self.batch_size],
@@ -56,7 +52,7 @@ class DataLoaderSceneFlow(object):
                 label = np.array(label)
                 yield left, right, label
         else:
-            for j in range(self.val_size // self.batch_size):
+            for j in range(40 // self.batch_size):
                 left, right, label = self.load_batch(val_left[j * self.batch_size: (j + 1) * self.batch_size],
                                                      val_right[j * self.batch_size: (j + 1) * self.batch_size],
                                                      val_labels[j * self.batch_size: (j + 1) * self.batch_size],
@@ -71,30 +67,35 @@ class DataLoaderSceneFlow(object):
         batch_right = []
         batch_label = []
         for x, y, z in zip(left, right, labels):
-            # print(x)
             if is_training:
-                crop_x = random.randint(0, 540 - 1 - self.patch_size[0])
-                crop_y = random.randint(0, 960 - 1 - self.patch_size[1])
+                crop_x = random.randint(0, 368 - self.patch_size[0])
+                crop_y = random.randint(0, 1200 - self.patch_size[1])
             else:
-                crop_x = (540 - 1 - self.patch_size[0]) // 2
-                crop_y = (960 - 1 - self.patch_size[1]) // 2
+                # self.patch_size = [368, 1232]
+                crop_x = (368 - self.patch_size[0]) // 2
+                crop_y = (1232 - self.patch_size[1]) // 2
 
-            x = cv2.imread(x)
+            x = cv2.imread(self.left_path + x)
             x = cv2.cvtColor(x, cv2.COLOR_BGR2RGB)
             x = x[crop_x: crop_x + self.patch_size[0], crop_y: crop_y + self.patch_size[1], :]
             x = self.mean_std(x)
             batch_left.append(x)
 
-            y = cv2.imread(y)
+            y = cv2.imread(self.right_path + y)
             y = cv2.cvtColor(y, cv2.COLOR_BGR2RGB)
             y = y[crop_x: crop_x + self.patch_size[0], crop_y: crop_y + self.patch_size[1], :]
             y = self.mean_std(y)
             batch_right.append(y)
 
-            z = readPFM(z)
+            # print('path:', self.gt_path + z)
+            # z = cv2.imread(self.gt_path + z)
             # z = cv2.cvtColor(z, cv2.COLOR_BGR2GRAY)
+            z = Image.open(self.gt_path + z)
+            z = np.ascontiguousarray(z, dtype=np.float32) / 256
             z = z[crop_x: crop_x + self.patch_size[0], crop_y: crop_y + self.patch_size[1]]
-            z[z > (self.max_disp - 1)] = self.max_disp - 1
+            # print('crop_x:', crop_x, 'crop_y:', crop_y, 'z_shape:', z.shape)
+            # z[z < 1.0] = 1.0
+            # z[z > (self.max_disp)] = self.max_disp
             batch_label.append(z)
         return batch_left, batch_right, batch_label
 
@@ -108,7 +109,3 @@ class DataLoaderSceneFlow(object):
         inputs[:, :, 2] -= 0.406
         inputs[:, :, 2] /= 0.225
         return inputs
-
-
-if __name__ == '__main__':
-    loader = DataLoaderSceneFlow(data_path='../dataset/', batch_size=10, max_disp=192)

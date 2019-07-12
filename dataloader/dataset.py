@@ -3,9 +3,9 @@ import random
 import tensorflow as tf
 
 import config
-import dataloader.listflowfile as lt
+import dataloader.list_file as lt
 from utils import readPFM
-from dataloader.load_SceneFlow import DataLoaderSceneFlow
+from dataloader.sceneflow_loader import DataLoaderSceneFlow
 
 import matplotlib.pyplot as plt
 

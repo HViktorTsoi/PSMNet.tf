@@ -11,7 +11,7 @@ def is_image_file(filename):
     return any(filename.endswith(extension) for extension in IMG_EXTENSIONS)
 
 
-def dataloader(filepath):
+def get_sceneflow_img(filepath):
     classes = [d for d in os.listdir(filepath) if os.path.isdir(os.path.join(filepath, d))]
     image = [img for img in classes if img.find('frames_cleanpass') > -1]
     disp = [dsp for dsp in classes if dsp.find('disparity') > -1]
@@ -97,3 +97,48 @@ def dataloader(filepath):
                         all_right_img.append(driving_dir + i + '/' + j + '/' + k + '/right/' + im)
 
     return all_left_img, all_right_img, all_left_disp, test_left_img, test_right_img, test_left_disp
+
+
+def get_kitti_2015_img(filepath):
+    left_fold = 'image_2/'
+    right_fold = 'image_3/'
+    disp_L = 'disp_occ_0/'
+    disp_R = 'disp_occ_1/'
+
+    image = [img for img in os.listdir(filepath + left_fold) if img.find('_10') > -1]
+
+    train = image[:160]
+    val = image[160:]
+
+    left_train = [filepath + left_fold + img for img in train]
+    right_train = [filepath + right_fold + img for img in train]
+    disp_train_L = [filepath + disp_L + img for img in train]
+    # disp_train_R = [filepath+disp_R+img for img in train]
+
+    left_val = [filepath + left_fold + img for img in val]
+    right_val = [filepath + right_fold + img for img in val]
+    disp_val_L = [filepath + disp_L + img for img in val]
+    # disp_val_R = [filepath+disp_R+img for img in val]
+
+    return left_train, right_train, disp_train_L, left_val, right_val, disp_val_L
+
+
+def get_kitti_2012_img(filepath):
+    left_fold = 'colored_0/'
+    right_fold = 'colored_1/'
+    disp_noc = 'disp_occ/'
+
+    image = [img for img in os.listdir(filepath + left_fold) if img.find('_10') > -1]
+
+    train = image[:]
+    val = image[160:]
+
+    left_train = [filepath + left_fold + img for img in train]
+    right_train = [filepath + right_fold + img for img in train]
+    disp_train = [filepath + disp_noc + img for img in train]
+
+    left_val = [filepath + left_fold + img for img in val]
+    right_val = [filepath + right_fold + img for img in val]
+    disp_val = [filepath + disp_noc + img for img in val]
+
+    return left_train, right_train, disp_train, left_val, right_val, disp_val

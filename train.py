@@ -8,7 +8,7 @@ import utils
 from PSMNet import PSMNet
 import matplotlib.pyplot as plt
 import numpy as np
-from dataloader.load_SceneFlow import DataLoaderSceneFlow
+from dataloader.sceneflow_loader import DataLoaderSceneFlow
 
 
 def train(ckpt_path):
