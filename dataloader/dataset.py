@@ -88,10 +88,6 @@ def get_dataset(data_path='dataset/', epoch=10, batch_size=18,
     all_left_img, all_right_img, all_left_disp, \
     test_left_img, test_right_img, test_left_disp = lt.get_sceneflow_img(data_path)
     dataset_len = len(all_right_img)
-    # 随机排列
-    random.shuffle(all_left_img)
-    random.shuffle(all_right_img)
-    random.shuffle(all_left_disp)
     all_left_img = tf.constant(all_left_img)
     all_right_img = tf.constant(all_right_img)
     all_disp = tf.constant(all_left_disp)
