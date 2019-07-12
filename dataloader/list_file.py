@@ -133,3 +133,27 @@ def get_kitti_2012_img(filepath):
     disp_val = [filepath + disp_noc + img for img in val]
 
     return left_train, right_train, disp_train, left_val, right_val, disp_val
+
+
+def get_kitti_2015_submission(filepath):
+    left_fold = 'image_2/'
+    right_fold = 'image_3/'
+
+    image = [img for img in os.listdir(filepath + left_fold) if img.find('_10') > -1]
+
+    left_test = [filepath + left_fold + img for img in image]
+    right_test = [filepath + right_fold + img for img in image]
+
+    return left_test, right_test
+
+
+def get_kitti_2012_submission(filepath):
+    left_fold = 'colored_0/'
+    right_fold = 'colored_1/'
+
+    image = [img for img in os.listdir(filepath + left_fold) if img.find('_10') > -1]
+
+    left_test = [filepath + left_fold + img for img in image]
+    right_test = [filepath + right_fold + img for img in image]
+
+    return left_test, right_test
