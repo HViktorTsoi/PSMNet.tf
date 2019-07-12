@@ -1,3 +1,4 @@
+import pickle
 import random
 
 import tensorflow as tf
@@ -5,7 +6,7 @@ import tensorflow as tf
 import config
 import dataloader.list_file as lt
 from utils import readPFM
-from dataloader.data_loader import DataLoaderKITTI
+from dataloader.data_loader import DataLoaderKITTI, DataLoaderKITTI_SUBMISSION
 
 import matplotlib.pyplot as plt
 
@@ -122,15 +123,27 @@ if __name__ == '__main__':
     #         plt.show()
     #         print(X[0].shape)
 
+    # # dg = DataLoaderSceneFlow(data_path='./dataset/', batch_size=config.TRAIN_BATCH_SIZE, max_disp=192)
+    # dg = DataLoaderKITTI(batch_size=config.TRAIN_BATCH_SIZE, max_disp=192)
+    # for step, (imgL_crop, imgR_crop, disp_crop_L) in enumerate(dg.generator(is_training=True)):
+    #     plt.imshow(imgL_crop[0])
+    #     plt.show()
+    #     plt.imshow(imgR_crop[0])
+    #     plt.show()
+    #     plt.imshow(disp_crop_L[0])
+    #     plt.show()
+    #
+    #     if step > 10: break
     # dg = DataLoaderSceneFlow(data_path='./dataset/', batch_size=config.TRAIN_BATCH_SIZE, max_disp=192)
-    dg = DataLoaderKITTI(data_path='./dataset/data_scene_flow_2015/training/', batch_size=config.TRAIN_BATCH_SIZE,
-                         max_disp=192)
-    for step, (imgL_crop, imgR_crop, disp_crop_L) in enumerate(dg.generator(is_training=True)):
-        plt.imshow(imgL_crop[0])
-        plt.show()
-        plt.imshow(imgR_crop[0])
-        plt.show()
-        plt.imshow(disp_crop_L[0])
-        plt.show()
-
-        if step > 10: break
+    # dg = DataLoaderKITTI_SUBMISSION()
+    # for step, (imgL, imgR, _) in enumerate(dg.generator()):
+    #     plt.imshow(imgL[0])
+    #     plt.show()
+    #     plt.imshow(imgR[0])
+    #     plt.show()
+    #
+    #     if step > 10: break
+    # 预处理数据集
+    all_left_img, all_right_img, all_left_disp, \
+    test_left_img, test_right_img, test_left_disp = lt.get_sceneflow_img('./dataset/')
+    print(all_left_img, all_right_img, all_left_disp, test_left_img, test_right_img, test_left_disp)

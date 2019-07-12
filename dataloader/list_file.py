@@ -1,5 +1,8 @@
 import os
+import random
+
 import os.path
+import pickle
 
 IMG_EXTENSIONS = [
     '.jpg', '.JPG', '.jpeg', '.JPEG',
@@ -11,7 +14,7 @@ def is_image_file(filename):
     return any(filename.endswith(extension) for extension in IMG_EXTENSIONS)
 
 
-def get_sceneflow_img(filepath):
+def generate_sceneflow_list(filepath):
     classes = [d for d in os.listdir(filepath) if os.path.isdir(os.path.join(filepath, d))]
     image = [img for img in classes if img.find('frames_cleanpass') > -1]
     disp = [dsp for dsp in classes if dsp.find('disparity') > -1]
@@ -23,21 +26,20 @@ def get_sceneflow_img(filepath):
     test_right_img = []
     test_left_disp = []
 
-    # monkaa_path = filepath + [x for x in image if 'monkaa' in x][0]
-    # monkaa_disp = filepath + [x for x in disp if 'monkaa' in x][0]
-    #
-    #
-    # monkaa_dir  = os.listdir(monkaa_path)
-    #
-    # for dd in monkaa_dir:
-    #   for im in os.listdir(monkaa_path+'/'+dd+'/left/'):
-    #    if is_image_file(monkaa_path+'/'+dd+'/left/'+im):
-    #     all_left_img.append(monkaa_path+'/'+dd+'/left/'+im)
-    #     all_left_disp.append(monkaa_disp+'/'+dd+'/left/'+im.split(".")[0]+'.pfm')
-    #
-    #   for im in os.listdir(monkaa_path+'/'+dd+'/right/'):
-    #    if is_image_file(monkaa_path+'/'+dd+'/right/'+im):
-    #     all_right_img.append(monkaa_path+'/'+dd+'/right/'+im)
+    monkaa_path = filepath + [x for x in image if 'monkaa' in x][0]
+    monkaa_disp = filepath + [x for x in disp if 'monkaa' in x][0]
+
+    monkaa_dir = os.listdir(monkaa_path)
+
+    for dd in monkaa_dir:
+        for im in os.listdir(monkaa_path + '/' + dd + '/left/'):
+            if is_image_file(monkaa_path + '/' + dd + '/left/' + im):
+                all_left_img.append(monkaa_path + '/' + dd + '/left/' + im)
+                all_left_disp.append(monkaa_disp + '/' + dd + '/left/' + im.split(".")[0] + '.pfm')
+
+        for im in os.listdir(monkaa_path + '/' + dd + '/right/'):
+            if is_image_file(monkaa_path + '/' + dd + '/right/' + im):
+                all_right_img.append(monkaa_path + '/' + dd + '/right/' + im)
     #
     # flying_path = filepath + [x for x in image if x == 'frames_cleanpass'][0]
     # flying_disp = filepath + [x for x in disp if x == 'frames_disparity'][0]
@@ -95,8 +97,18 @@ def get_sceneflow_img(filepath):
 
                     if is_image_file(driving_dir + i + '/' + j + '/' + k + '/right/' + im):
                         all_right_img.append(driving_dir + i + '/' + j + '/' + k + '/right/' + im)
+    # 保存数据
+    dataset = list(zip(all_left_img, all_right_img, all_left_disp))
+    random.shuffle(dataset)
+    pickle.dump(dataset, open('./ckpt/scene_flow_list.pkl', 'wb'))
 
     return all_left_img, all_right_img, all_left_disp, test_left_img, test_right_img, test_left_disp
+
+
+def get_sceneflow_img(filepath):
+    # 从缓存的文件列表中直接读取数据集
+    dataset = tuple(zip(*pickle.load(open('./ckpt/scene_flow_list.pkl', 'rb'))))
+    return dataset[0], dataset[1], dataset[2], None, None, None
 
 
 def get_kitti_2015_img(filepath):
